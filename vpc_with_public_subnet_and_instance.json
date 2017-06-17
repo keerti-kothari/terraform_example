@@ -1,0 +1,141 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "This is my first CFN template.",
+  
+  "Parameters" : {
+    "KeyName" : {
+	  "Description" : "Name of my existing EC2 key pair.",
+	  "Type" : "AWS::EC2::KeyPair::KeyName",
+	  "ConstraintDescription" : "Must be the name of existing EC2 keypair"
+	},
+	"EC2InstanceType" : {
+	  "Description" : "EC2 instance type.",
+	  "Type" : "String",
+	  "Default" : "t2.micro",
+	  "AllowedValues" : [ "t2.xlarge", "t2.small", "t2.nano", "t2.micro", "t2.medium", "t2.large", "t2.2xlarge", "m4.xlarge", "m4.large", "m4.4xlarge", "m4.2xlarge", "m4.16xlarge", "m4.10xlarge", "m3.xlarge", "m3.medium", "m3.large", "m3.2xlarge", "c4.xlarge", "c4.large", "c4.8xlarge", "c4.4xlarge", "c4.2xlarge" ],
+	  "ConstraintDescription" : "Must be valid EC2 instance type."
+	}
+  },
+  
+  "Mappings" : {
+    "RegionToAMI" : {
+	  "us-east-1" : { "AMI" : "ami-c58c1dd3" },
+	  "us-east-2" : { "AMI" : "ami-4191b524" },
+	  "us-west-1" : { "AMI" : "ami-7a85a01a" },
+	  "us-west-2" : { "AMI" : "ami-4836a428" },
+	  "ca-central-1" : { "AMI" : "ami-0bd66a6f" },
+	  "eu-west-1" : { "AMI" : "ami-01ccc867" },
+	  "eu-west-2" : { "AMI" : "ami-b6daced2" },
+	  "eu-central-1" : { "AMI" : "ami-b968bad6" },
+	  "sa-east-1" : { "AMI" : "ami-37cfad5b" },
+	  "ap-south-1" : { "AMI" : "ami-52c7b43d" },
+	  "ap-southeast-1" : { "AMI" : "ami-fc5ae39f" },
+	  "ap-southeast-2" : { "AMI" : "ami-162c2575" },
+	  "ap-northeast-1" : { "AMI" : "ami-923d12f5" },
+	  "ap-northeast-2" : { "AMI" : "ami-9d15c7f3" }
+	}
+  },
+  
+  "Resources" : {
+    "VPC" : {
+	  "Type" : "AWS::EC2::VPC",
+	  "Properties" : {
+	    "EnableDnsSupport" : "true",
+		"EnableDnsHostnames" : "true",
+		"CidrBlock" : "192.168.0.0/16",
+		"Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ]
+	  }
+	},
+	"PublicSubnet" : {
+	  "Type" : "AWS::EC2::Subnet",
+	  "Properties" : {
+	    "VpcId" : { "Ref" : "VPC" },
+		"CidrBlock" : "192.168.1.0/24",
+		"Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ]
+	  }
+	},
+	"InternetGateway" : {
+	  "Type" : "AWS::EC2::InternetGateway",
+	  "Properties" : {
+	    "Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ]
+	  }
+	},
+	"GatewayAttach" : {
+	  "Type" : "AWS::EC2::VPCGatewayAttachment",
+	  "Properties" : {
+	    "VpcId" : { "Ref" : "VPC" },
+		"InternetGatewayId" : { "Ref" : "InternetGateway" }
+	  }
+	},
+	"PublicRouteTable" : {
+	  "Type" : "AWS::EC2::RouteTable",
+	  "Properties" : {
+	    "VpcId" : { "Ref" : "VPC" },
+		"Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ]
+	  }
+	},
+	"PublicRoute" : {
+	  "Type" : "AWS::EC2::Route",
+	  "DependsOn" : "InternetGateway",
+	  "Properties" : {
+	    "RouteTableId" : { "Ref" : "PublicRouteTable" },
+		"DestinationCidrBlock" : "0.0.0.0/0",
+		"GatewayId" : { "Ref" : "InternetGateway" }
+	  }
+	},
+	"PublicSubnetRouteTableAssociation" : {
+	  "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+	  "Properties" : {
+	    "SubnetId" : { "Ref" : "PublicSubnet" },
+		"RouteTableId" : { "Ref" : "PublicRouteTable" }
+	  }
+	},
+	"EC2SecurityGroup" : {
+	  "Type" : "AWS::EC2::SecurityGroup",
+	  "Properties" : {
+	    "GroupDescription" : "Enable SSH access to EC2 instance",
+		"VpcId" : { "Ref" : "VPC" },
+		"SecurityGroupIngress" : [{
+		  "IpProtocol" : "tcp",
+		  "FromPort" : "22",
+		  "ToPort" : "22",
+		  "CidrIp" : "0.0.0.0/0"
+		},
+		{
+		  "IpProtocol" : "tcp",
+		  "FromPort" : "80",
+		  "ToPort" : "80",
+		  "CidrIp" : "0.0.0.0/0"
+		}],
+		"Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ]
+	  }
+	},
+	"EC2Instance" : {
+	  "Type" : "AWS::EC2::Instance",
+	  "Properties" : {
+	    "InstanceType" : { "Ref" : "EC2InstanceType" },
+		"KeyName" : { "Ref" : "KeyName" },
+		"ImageId" : { "Fn::FindInMap" : [ "RegionToAMI", { "Ref" : "AWS::Region" }, "AMI" ] },
+		"NetworkInterfaces" : [{
+		  "GroupSet" : [ { "Ref" : "EC2SecurityGroup" } ],
+		  "AssociatePublicIpAddress" : "true",
+		  "DeviceIndex" : "0",
+		  "DeleteOnTermination" : "true",
+		  "SubnetId" : { "Ref" : "PublicSubnet" }
+		}],
+		"Tags" : [ { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } } ],
+		"UserData" : { "Fn::Base64" : { "Fn::Join" : [ "\n", [ 
+		"#!/bin/bash -ex",
+		"yum install httpd -y",
+		"service httpd start"
+		] ] } }
+	  }
+	}
+  },
+  "Outputs" : {
+    "ServerAddress" : {
+	  "Description" : "Public address of EC2 instance.",
+	  "Value" : { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "EC2Instance", "PublicIp" ] } ] ] }
+	}
+  }
+}
